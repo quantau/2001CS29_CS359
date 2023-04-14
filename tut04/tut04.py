@@ -156,10 +156,3 @@ if __name__ == "__main__":
 
 
 
-
-# Problems to address:
-# Remove routerList from global declaration to main
-
-# Things to improve:
-# Make class for each routers data?
-# instead of n - 1 iterations strictly make it a variable, based on whether there are any updates
