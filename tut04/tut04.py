@@ -1,161 +1,165 @@
+import threading
+import queue
+import time 
 
-from datetime import datetime
-start_time = datetime.now()
+# Queue for for each router to get RoutingTables from neighbouring Routers
+RouterQueue={}
 
-#Help https://youtu.be/H37f_x4wAC0
-def octant_longest_subsequence_count_with_range():
-    import pandas as pd
-    try:
-        data=pd.read_excel("input_octant_longest_subsequence_with_range.xlsx")
-    except FileNotFoundError:
-        print("Incorrect file name")  
-    else:
+# List of all Routers
+RouterList=[]
 
-        ##############################
-        #Creating the columns in the excel sheet
-        data["Octant"]="" 
-        data[""]=""
-        data["count"]=""
-        data["Longest Subsequence Length"]=""
-        data["Count"]=""
-        data["  "]=""
-        data["octant"]=""
-        data["Length of longest subsequence"]=""
-        data["Count of longest subsequence"]=""
-        values=["+1","-1","+2","-2","+3","-3","+4","-4"]
-        for i in range(0,8,1):
-            data.at[i,"count"]=values[i]
-        ##############################
-        lastval=data.index[-1]  #To calculate the last index, when index starts from 0 
-        ##############################################
-        #The following lines of code would check the numbers in the 3 columns and determine the octant values
-        #based on the conditional statements provided
-        #Calculating the octant value follows the same logic as described in the explanatory video
-        for i in range(0,lastval+1,1):
-            u=data["U'=U-U Avg"][i]
-            v=data["V'=V-V Avg"][i]
-            w=data["W'=W-W Avg"][i]
-            if u>0:
-                if v>0:
-                    if w>0:
-                        
-                        data.at[i,'Octant']="+1"
-                    else:
-                        
-                        data.at[i,'Octant']="-1"
-                else:
-                    if w>0:
-                        
-                        data.at[i,'Octant']="+4"
-                    else:
-                        
-                        data.at[i,'Octant']="-4"
-            else:
-                if v>0:
-                    if w>0:
-                        data.at[i,'Octant']="+2"
-                    else:
-                        data.at[i,'Octant']="-2"
-                else:
-                    if w>0:
-                        data.at[i,'Octant']="+3"
-                    else: 
-                        data.at[i,'Octant']="-3"
+IOlock=threading.Lock()
+
+ # Method to print the routing table of a router
+def print_routing_table(CurrRouter,iteration_count,RoutingTable, UpdateList):
+    # Acquire the lock before executing the code inside the method
+    IOlock.acquire()
+
+    # Define a string of dashes for use in the output formatting
+    DASHES = "-" * 41
+    # Define a string to represent the router and iteration count for use in the output formatting
+    head_string = f"From Router: {CurrRouter} | Iteration Count: {iteration_count}"
+    # Print a line of dashes to separate the output
+    print(DASHES)
+    # Print the header string for this router and iteration count, with proper spacing and alignment
+    print(f"| {head_string:<37} |")
+    # Print another line of dashes to separate the output
+    print(DASHES)
+    # Print the table headers for the routing table output
+    print("| To Router  | Cost       | Via Router  |")
+    print(DASHES)
+
+    # Iterate through each element of the routing table
+    for key in RoutingTable:
+        # Extract the destination router ID from the element
+        to_router = key
+        # If the destination router is in the set of recently changed routers, prepend a "*" to the output
+        if key in UpdateList:
+            to_router = "* " + to_router
+        # Otherwise, prepend a space to the output
+        else:
+            to_router = "  " + to_router
+        # Print the routing table entry, with proper spacing and alignment
+        print(f"| {to_router:<10} |"
+                + f" {RoutingTable[key][1] :<10} |"
+                + f" {(RoutingTable[key][0]):<11} |")
+
+    # Print another line of dashes to separate the output
+    print(DASHES, end="\n\n")
+    # Release the lock
+    IOlock.release()
+
+# Function to read the topology from a file
+def ReadTopology(graph,WeightMap):
+    global RouterList
+    # Open the file in read mode
+    fd = open('topology.txt', 'r')
+
+    # reading the number of routers
+    RouterCount = int(fd.readline())
+
+    # reading the list of routers
+    RouterList = fd.readline().split()
+
+    # initializing the adjacency list and the Queues
+    for router in RouterList:
+        graph[router]=[]
+        WeightMap[router]={}
+        RouterQueue[router]=queue.Queue()
+
+    # reading the edges
+    while True:
+        linedata=fd.readline()
+        if linedata == 'EOF':
+            break
+        edge = linedata.split()
+        # constructing the adjacency list
+        graph[edge[0]].append(edge[1]) 
+        graph[edge[1]].append(edge[0]) 
+        # constructing weight map
+        WeightMap[edge[0]][edge[1]]=int(edge[2])
+        WeightMap[edge[1]][edge[0]]=int(edge[2])
+
+# Function to process routing for a single router in a separate thread
+def router_thread(CurrRouter, NeighbourList, NeighbourWeights, RouterList):
+
+    # Initialize the routing table
+    RoutingTable = {}
+    for router in RouterList:
+        RoutingTable[router] = (CurrRouter, 1000) # (next_hop_router, distance)
+    for router in NeighbourWeights:
+        distance = NeighbourWeights[router]
+        RoutingTable[router] = (router, distance)
+    RoutingTable[CurrRouter] = (CurrRouter, 0) # Set distance to self to 0
+    
+    # list which will have destination nodes that have been updated in the current iteration
+    UpdateList = []
+
+    RouterCount = len(RouterList)
+    for i in range(RouterCount - 1):
+
+        # Process all the updates that the neighbouring routers sent
+        while not RouterQueue[CurrRouter].empty():
+            NeighbourRoutingTable, child_router = RouterQueue[CurrRouter].get()
+            for dst_router in NeighbourRoutingTable:
+                distance = NeighbourRoutingTable[dst_router][1] + NeighbourWeights[child_router]
+                if RoutingTable[dst_router][1] > distance: #checking if the we can reduce the path distance                   
+                    UpdateList.append(dst_router)
+                    RoutingTable[dst_router] = (child_router, distance)#reduced path distance
+
+        # Print routing table
+        print_routing_table(CurrRouter, i, RoutingTable, UpdateList)
+
+        # resetting UpdateList for the next iteration
+        UpdateList.clear()
+
+        # Send updates to neighbouring routers
+        for router in NeighbourList:
+            RouterQueue[router].put((RoutingTable, CurrRouter))
+
+        time.sleep(2) # Wait for 2 seconds between updates
+
+
+
+# defining the main function
+def main():
+    # creating empty dictionaries for graph and weight map
+    graph={}
+    WeightMap={}
+
+    # parsing the input from topology.txt
+    ReadTopology(graph,WeightMap)
+
+    # getting the number of routers
+    RouterCount=len(RouterList)
+
+    # printing the structures established
+    print("Following is the graph: ",graph)
+    print("Following is the weightMap: ",WeightMap)
+    print("Following is the list of Routers: ",RouterList)
         
-        
-        count=[0,0,0,0,0,0,0,0] #creating an empty array to store the counted values of consecutive occurrences
-        large=[0,0,0,0,0,0,0,0] #creating another empty array to store the largest consecutively counted occurrences
-        pos=0
-        for i in range(0,lastval,1):
-            #goes to a value at a particular time and checks if the next occurring element is same as the current one
-            if(data['Octant'][i]==data['Octant'][i+1]):     
-                for j in range(0,8,1):                      
-                    if (data['Octant'][i]==values[j]):
-                        #keeps counting till the next element is same as the previous one                              
-                        count[j]+=1
-                        pos=j
-            else:
-                #after one point the next element will not be same as the previous one
-                #in that case we'll be checking if the counted value is largest value counted yet 
-                #once the largest counted value of the octant is added to large, count is set to zero again  
-                                                        
-                if (count[pos]>large[pos]):                 
-                    large[pos]=count[pos]                   
-                    count[pos]=0      
+    # creating a list to hold threads for each router 
+    threadList=[]
+    for i in range(RouterCount):
+        # creating thread for each router and adding it to threadList
+        threadList.append(threading.Thread(target=router_thread,args=(RouterList[i],graph[RouterList[i]],WeightMap[RouterList[i]],RouterList)))
+        # starting the thread
+        threadList[i].start()
 
-                #in case the counted value is smaller than or equal to the previous largest counted value then 'large' remains the same as before
-                
-                else:
-                    large[pos]=large[pos]                   
-                    count[pos]=0          
-                    
-        
-        #the previous blocks counted the largest consecutive occerrence of a particular octant value
-        #but the counted value will be one less than the actual value because the initial value of 'count' was set to zero
-        #hence every octant element that exists, is given an additional count value in the code given below
-        for j in range(0,8,1):
-            for i in range(0,lastval,1):
-                if (data['Octant'][i]==values[j]):
-                    large[j]+=1
-                    break
-        
-        #code to count how many largest occurrences present for each octant value
-        count2=[0,0,0,0,0,0,0,0]              
-        for j in range(0,8,1):                   
-            for i in range(0,lastval-large[j]+1,1):
-                supercount=0
-                for k in range(0,large[j],1):
-                    if(data['Octant'][i+k]==values[j]):
-                        supercount+=1
-                if(supercount==large[j]):
-                    count2[j]+=1
-        #code to insert the final values to the excel sheet
-        for i in range(0,8,1):
-            data.at[i,"Longest Subsequence Length"]=large[i]
-            data.at[i,"Count"]=count2[i]
-        
+    # joining the threads 
+    for i in range(RouterCount):
+        threadList[i].join()
 
-        timefromtopos=1
-        for i in range(0,8,1):
-
-            #Here we write the octant values as headings for each block in the excel sheet
-            #We also add the headings "Time", "To" and "From" to the blocks for each octant
-            data.at[timefromtopos-1,"octant"]=values[i]
-            data.at[timefromtopos,"octant"]="Time"
-            data.at[timefromtopos-1,"Length of longest subsequence"]=large[i]
-            data.at[timefromtopos,"Length of longest subsequence"]="From"
-            data.at[timefromtopos,"Count of longest subsequence"]="To"
-            data.at[timefromtopos-1,"Count of longest subsequence"]=count2[i]
-            
-            anotherpos=1
-            for j in range(0,lastval,1):
-                newcount=1
-                if(values[i]==data["Octant"][j]):   #this code checks the initial and final timestamp of the largest consecutive occerrence of an octant value
-                    for k in range(1,large[i],1):   #it goes to the octant value, checks if the next 'n' consecutive numbers are same as the current number
-                        if(large[i]<=(lastval-j)):  #where 'n' is the largest consecutive occerrence calculated previously
-                            if(data["Octant"][j]==data["Octant"][j+k]):
-                                newcount+=1
-                if(newcount==large[i]):
-                          #writes the timestamp to the excel sheet
-                          data.at[timefromtopos+anotherpos,"Length of longest subsequence"]=data["Time"][j]
-                          data.at[timefromtopos+anotherpos,"Count of longest subsequence"]=data["Time"][j+large[i]-1]
-                          anotherpos+=1  
-            timefromtopos+=2+count2[i]
-        data.to_excel("output_octant_longest_subsequence_with_range.xlsx",index=False)
+# checking if the script is being run directly and calling the main function
+if __name__ == "__main__":
+    main()
 
 
 
-from platform import python_version
-ver = python_version()
 
-if ver == "3.8.10":
-    print("Correct Version Installed")
-else:
-    print("Please install 3.8.10. Instruction are present in the GitHub Repo/Webmail. Url: https://pastebin.com/nvibxmjw")
+# Problems to address:
+# Remove routerList from global declaration to main
 
-
-octant_longest_subsequence_count_with_range()
-
-#This shall be the last lines of the code.
-end_time = datetime.now()
-print('Duration of Program Execution: {}'.format(end_time - start_time))
+# Things to improve:
+# Make class for each routers data?
+# instead of n - 1 iterations strictly make it a variable, based on whether there are any updates
