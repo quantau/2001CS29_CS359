@@ -1,202 +1,232 @@
+import threading
+import time
+import queue
+
+# List of all Routers
+RouterList = []
+
+# Queue for for each router to get RoutingTables from neighbouring Routers
+RouterQueue = {}
+
+IOlock = threading.Lock()
+
+# Method to print the routing table of a router
+def print_routing_table(CurrRouter, iteration_count, RoutingTable, UpdateList):
+    # Acquire the lock before executing the code inside the method
+    IOlock.acquire()
+
+    # Define a string of dashes for use in the output formatting
+    DASHES = "-" * 41
+    # Define a string to represent the router and iteration count for use in the output formatting
+    head_string = f"From Router: {CurrRouter} | Iteration Count: {iteration_count}"
+    # Print a line of dashes to separate the output
+    print(DASHES)
+    # Print the header string for this router and iteration count, with proper spacing and alignment
+    print(f"| {head_string:<37} |")
+    # Print another line of dashes to separate the output
+    print(DASHES)
+    # Print the table headers for the routing table output
+    print("| To Router  | Cost       | Via Router  |")
+    print(DASHES)
+
+    # Iterate through each element of the routing table
+    for key in RoutingTable:
+        # Extract the destination router ID from the element
+        to_router = key
+        # If the destination router is in the set of recently changed routers, prepend a "*" to the output
+        if key in UpdateList:
+            to_router = "* " + to_router
+        # Otherwise, prepend a space to the output
+        else:
+            to_router = "  " + to_router
+        # Print the routing table entry, with proper spacing and alignment
+        print(f"| {to_router:<10} |"
+              + f" {RoutingTable[key][1] :<10} |"
+                + f" {(RoutingTable[key][0]):<11} |")
+
+    # Print another line of dashes to separate the output
+    print(DASHES, end="\n\n")
+    # Release the lock
+    IOlock.release()
 
 
-from datetime import datetime
-from hashlib import new
-start_time = datetime.now()
+def print_tuple_list_in_box(data_list, head1, head2):
+    # Determine the maximum width of the data in each column
+    max_width_col1 = len(max([str(x[0])
+                         for x in data_list] + [head1], key=len))
+    max_width_col2 = len(max([str(x[1])
+                         for x in data_list] + [head2], key=len))
 
-#Help https://youtu.be/N6PBd4XdnEw
-def octant_range_names(mod=5000):
-    octant_name_id_mapping = {"1":"Internal outward interaction", "-1":"External outward interaction", "2":"External Ejection", "-2":"Internal Ejection", "3":"External inward interaction", "-3":"Internal inward interaction", "4":"Internal sweep", "-4":"External sweep"}
-    import pandas as pd
-    try:
-        data=pd.read_excel("octant_input.xlsx")
-    except FileNotFoundError:
-        print("Incorrect file name")  
-    else:
+    # Determine the total width of the box
+    total_width = max_width_col1 + max_width_col2 + 7
 
-        ##############################
-        #Creating the columns in the excel sheet
-        data=pd.read_excel("octant_input.xlsx")
-        data["Octant"]=""
-        data[""]=""
-        data.at[2,""]="User Input"
-        data[" "]=""
-        data.at[0," "]="Octant ID"
-        data.at[1," "]="Overall Count"
-        data.at[2," "]="Mod "+str(mod)
-        data["  "]=""
-        data["   "]=""
-        data["    "]=""
-        data["     "]=""
-        data["      "]=""
-        data["       "]=""
-        data["        "]=""
-        data["         "]=""
-        data.at[0,"  "]="1"
-        data.at[0,"   "]="-1"
-        data.at[0,"    "]="2"
-        data.at[0,"     "]="-2"
-        data.at[0,"      "]="3"
-        data.at[0,"       "]="-3"
-        data.at[0,"        "]="4"
-        data.at[0,"         "]="-4"
-        data["1"]=""
-        data["-1"]=""
-        data["2"]=""
-        data["-2"]=""
-        data["3"]=""
-        data["-3"]=""
-        data["4"]=""
-        data["-4"]=""
-        data["          "]=""
-        data.at[0,"          "]="Rank 1 Octant ID"
-        data["           "]=""
-        data.at[0,"           "]="Rank 1 Octant Name"
-        values=[1,-1,2,-2,3,-3,4,-4]
-        s=1
-        for i in values:
-            data.at[0,str(i)]="Rank"+" "+str(s)
-            s+=1
-        data.at[0,"1"]="Rank 1"
-        lastval=data.index[-1]
-        count1=0
-        countm1=0
-        count2=0
-        countm2=0
-        count3=0
-        countm3=0
-        count4=0
-        countm4=0
-        multiply=lastval//mod
-        counterforeachoctant=2
-        a=0
-        b=0
-        c=0
-        d=0
-        e=0
-        f=0
-        g=0
-        h=0
-        for j in range(1,multiply+2,1):
-            if(j==1):
-                data.at[j+2," "]="0000"+"-"+str(mod-1)
-            else:
-                if(j<=multiply):
-                    num=str(mod*(j-1))+"-"+str(mod*j - 1)
-                    data.at[j+2," "]=num
-                else:
-                    num=str(mod*(j-1))+"-"+str(lastval)
-                    data.at[j+2," "]=num
-        rank1count=[0,0,0,0,0,0,0,0]
-        for i in range(0,lastval+1,1):
-            u=data["U'=U-U Avg"][i]
-            v=data["V'=V-V Avg"][i]
-            w=data["W'=W-W Avg"][i]
-            if u>0:
-                if v>0:
-                    if w>0:
-                        
-                        data.at[i,'Octant']=1
-                    else:
-                        
-                        data.at[i,'Octant']=-1
-                else:
-                    if w>0:
-                        
-                        data.at[i,'Octant']=4
-                    else:
-                        
-                        data.at[i,'Octant']=-4
-            else:
-                if v>0:
-                    if w>0:
-                        data.at[i,'Octant']=2
-                    else:
-                        data.at[i,'Octant']=-2
-                else:
-                    if w>0:
-                        data.at[i,'Octant']=3
-                    else: 
-                        data.at[i,'Octant']=-3                     
-            if((data["Octant"][i])==1):
-                count1+=1
-            elif((data["Octant"][i])==-1):
-                countm1+=1
-            elif((data["Octant"][i])==2):
-                count2+=1
-            elif((data["Octant"][i])==-2):
-                countm2+=1   
-            elif((data["Octant"][i])==3):
-                count3+=1
-            elif((data["Octant"][i])==-3):
-                countm3+=1
-            elif((data["Octant"][i])==4):
-                count4+=1
-            elif((data["Octant"][i])==-4):
-                countm4+=1
-            if(((i!=0)and((i+1)%mod==0))or(i==lastval)):
-                data.at[counterforeachoctant+1,"  "]=count1-a
-                data.at[counterforeachoctant+1,"   "]=countm1-b
-                data.at[counterforeachoctant+1,"    "]=count2-c
-                data.at[counterforeachoctant+1,"     "]=countm2-d
-                data.at[counterforeachoctant+1,"      "]=count3-e
-                data.at[counterforeachoctant+1,"       "]=countm3-f
-                data.at[counterforeachoctant+1,"        "]=count4-g
-                data.at[counterforeachoctant+1,"         "]=countm4-h
-                counts=[count1-a,countm1-b,count2-c,countm2-d,count3-e,countm3-f,count4-g,countm4-h]
-                ncounts=sorted(counts)
-                for i in range(0,8,1):
-                    for j in range(0,8,1):
-                        if (ncounts[i]==counts[j]):
-                            data.at[counterforeachoctant+1,str(values[j])]=8-i
-                            data.at[counterforeachoctant+1,"          "]=values[j]
-                            data.at[counterforeachoctant+1,"           "]=octant_name_id_mapping[str(values[j])]
-                            if (i==7):
-                                rank1count[j]=rank1count[j]+1
-                a,b,c,d,e,f,g,h=count1,countm1,count2,countm2,count3,countm3,count4,countm4
-                counterforeachoctant+=1
-            else:
-                continue    
-        data.at[1,"  "]=count1
-        data.at[1,"   "]=countm1
-        data.at[1,"    "]=count2
-        data.at[1,"     "]=countm2
-        data.at[1,"      "]=count3
-        data.at[1,"       "]=countm3
-        data.at[1,"        "]=count4
-        data.at[1,"         "]=countm4
-        ovcounts=[count1,countm1,count2,countm2,count3,countm3,count4,countm4]    
-        novcounts=sorted(ovcounts)
-        for i in range(0,8,1):
-            for j in range(0,8,1):
-                if (novcounts[i]==ovcounts[j]):
-                    data.at[1,str(values[j])]=8-i
-                    data.at[1,"          "]=values[j]
-                    data.at[1,"           "]=octant_name_id_mapping[str(values[j])]
-        newpos=7+(lastval//mod)
-        data.at[newpos,"  "]="Octant ID"
-        data.at[newpos,"   "]="Octant Name"
-        data.at[newpos,"    "]="Count of Rank 1 Mod Values"
-        for i in range(0,8,1):
-            data.at[newpos+1+i,"  "]=values[i]
-            data.at[newpos+1+i,"   "]=octant_name_id_mapping[str(values[i])]
-            data.at[newpos+1+i,"    "]=rank1count[i]        
-        data.to_excel('octant_output.xlsx',index=False)
+    # Print the top of the box
+    print("+", "-" * (total_width-2), "+", sep="")
 
-from platform import python_version
-ver = python_version()
+    # Print the headers
+    print("|", head1.center(max_width_col1+2), "|",
+          head2.center(max_width_col2+2), "|", sep="")
 
-if ver == "3.8.10":
-    print("Correct Version Installed")
-else:
-    print("Please install 3.8.10. Instruction are present in the GitHub Repo/Webmail. Url: https://pastebin.com/nvibxmjw")
+    # Print a line to separate the headers from the data
+    print("|", "-" * (max_width_col1+2), "|",
+          "-" * (max_width_col2+2), "|", sep="")
 
+    # Print the data rows
+    for item in data_list:
+        print("|", str(item[0]).ljust(max_width_col1+2), "|",
+              str(item[1]).ljust(max_width_col2+2), "|", sep="")
 
-mod=5000 
-octant_range_names(mod)
+    # Print the bottom of the box
+    print("+", "-" * (total_width-2), "+", sep="")
 
 
 
-#This shall be the last lines of the code.
-end_time = datetime.now()
-print('Duration of Program Execution: {}'.format(end_time - start_time))
+
+# Function to read the topology from a file
+def ReadTopology(graph):
+    global RouterList
+    # Open the file in read mode
+    fd = open('topology.txt', 'r')
+
+    # reading the number of routers
+    RouterCount = int(fd.readline())
+
+    # reading the list of routers
+    RouterList = fd.readline().split()
+
+    # initializing the adjacency list and the Queues
+    for router in RouterList:
+        graph[router] = []
+        RouterQueue[router] = queue.Queue()
+
+    # reading the edges
+    while True:
+        linedata = fd.readline()
+        if linedata == 'EOF':
+            break
+        edge = linedata.split()
+        # constructing the adjacency list
+        graph[edge[0]].append((edge[1], int(edge[2])))
+        graph[edge[1]].append((edge[0], int(edge[2])))
+      
+
+# Function to process routing for a single router in a separate thread
+def router_thread(CurrRouter, Mygraph, RouterList):
+    # Create a dictionary with the current router as the key and the graph as the value
+    graph = {}
+    graph[CurrRouter] = Mygraph
+
+    # Continuously update the router queue every 2 seconds
+    while True:
+        # Iterate through each router and add its data to the router queue
+        for router, router_distance in Mygraph:
+            RouterQueue[router].put((CurrRouter, graph))
+
+        time.sleep(2)
+
+        # Process the data in the router queue
+        NewData = False
+        while not RouterQueue[CurrRouter].empty():
+            NeighbourRouter, NeighbourGraph = RouterQueue[CurrRouter].get()
+            # Iterate through each destination router in the neighbor's graph
+            for dst_router in NeighbourGraph:
+                # If the destination router is not in the current router's graph, add it
+                if dst_router not in graph:
+                    NewData = True
+                    graph[dst_router] = NeighbourGraph[dst_router]
+
+        # If there's no new data, break out of the loop
+        if not NewData:
+            break
+
+    # Create an empty routing table
+    RoutingTable = {}
+
+    # Iterate through each router in the network and set its default distance to 1000
+    for Router in RouterList:
+        RoutingTable[Router] = (CurrRouter,1000)
+
+    # Iterate through each neighbor router and update its distance and path in the routing table
+    VisitedList = []
+    for NeighbourRouter, EdgeWeight in graph[CurrRouter]:
+        RoutingTable[NeighbourRouter] = (NeighbourRouter, EdgeWeight)
+
+    # Set the current router's distance to 0 in the routing table
+    RoutingTable[CurrRouter] = (CurrRouter,0)
+
+    # Lock the input/output to avoid conflicting messages
+    IOlock.acquire()
+    print("The Routing Table of ", CurrRouter, " is :")
+    IOlock.release()
+
+    # Print the current router's routing table
+    print_routing_table(CurrRouter, len(VisitedList), RoutingTable, [])
+
+    # Iterate through each router in the network and update its distance and path in the routing table
+    while len(VisitedList) < len(RouterList):
+        UpdateList = []
+        MinDistanceRouter = 0
+        MinDistance = 1000
+        for Router in RoutingTable:
+            # If the router has already been visited, skip it
+            if Router in VisitedList:
+                continue
+            # If the router's distance is less than the current minimum, update the minimum
+            if RoutingTable[Router][1] < MinDistance:
+                MinDistanceRouter = Router
+                MinDistance = RoutingTable[Router][1]
+
+        # Add the router to the visited list
+        VisitedList.append(MinDistanceRouter)
+ 
+        # Iterate through each neighbor router and update its distance and path if it's shorter than the current value
+        try:
+            for NeighbourRouter, EdgeWeight in graph[MinDistanceRouter]:
+                CurrDistance = MinDistance+EdgeWeight
+                if CurrDistance < RoutingTable[NeighbourRouter][1]:
+                    UpdateList.append(NeighbourRouter)
+                    RoutingTable[NeighbourRouter] = (MinDistanceRouter, CurrDistance)
+        except:
+            print("The key error is in",CurrRouter," where ",MinDistanceRouter," key was attempted to be access.")
+            print("Following is the graph:", graph)
+        else:
+            # Lock the input/output to avoid conflicting messages
+            print_routing_table(CurrRouter,len(VisitedList),RoutingTable,UpdateList)
+    return
+
+
+# defining the main function
+def main():
+    # creating empty dictionaries for graph and weight map
+    graph = {}
+
+    # parsing the input from topology.txt
+    ReadTopology(graph)
+
+    # getting the number of routers
+    RouterCount = len(RouterList)
+
+    # printing the structures established
+    # print("Following is the graph: ", graph)
+    for node in graph:
+        print("The edges of",node ,"are:")
+        print_tuple_list_in_box(graph[node], 'destination', 'distance')
+    print("Following is the list of Routers: ", RouterList)
+
+    # creating a list to hold threads for each router
+    threadList = []
+    for i in range(RouterCount):
+        # creating thread for each router and adding it to threadList
+        threadList.append(threading.Thread(target=router_thread, args=(
+            RouterList[i], graph[RouterList[i]],  RouterList)))
+        # starting the thread
+        threadList[i].start()
+
+    # joining the threads
+    for i in range(RouterCount):
+        threadList[i].join()
+
+
+# checking if the script is being run directly and calling the main function
+if __name__ == "__main__":
+    main()
