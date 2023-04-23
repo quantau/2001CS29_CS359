@@ -10,44 +10,56 @@ RouterQueue = {}
 
 IOlock = threading.Lock()
 
-# Method to print the routing table of a router
-def print_routing_table(CurrRouter, iteration_count, RoutingTable, UpdateList):
-    # Acquire the lock before executing the code inside the method
+
+def print_routing_table(CurrRouter, iteration_count, dictionary, UpdateList):
+    # Find the maximum length of the keys and the values
+    max_key_length = max(len(str(key)) for key in dictionary.keys())
+    max_val_length_1 = max(len(str(val[0])) for val in dictionary.values())
+    max_val_length_2 = max(len(str(val[1])) for val in dictionary.values())
+
+    # Update the maximum lengths to account for the column headers
+    max_key_length = max(len("Destination Router"), max_key_length)
+    max_val_length_1 = max(len("Via Router"), max_val_length_1)
+    max_val_length_2 = max(len("Distance"), max_val_length_2)
+
+    # Iterate through the dictionary and convert values to strings
+    for key, val in dictionary.items():
+        val1, val2 = val
+        val1 = str(val1)
+        val2 = str(val2)
+
+    # Acquire a lock to prevent multiple threads from printing at the same time
     IOlock.acquire()
 
-    # Define a string of dashes for use in the output formatting
-    DASHES = "-" * 41
-    # Define a string to represent the router and iteration count for use in the output formatting
-    head_string = f"From Router: {CurrRouter} | Iteration Count: {iteration_count}"
-    # Print a line of dashes to separate the output
-    print(DASHES)
-    # Print the header string for this router and iteration count, with proper spacing and alignment
-    print(f"| {head_string:<37} |")
-    # Print another line of dashes to separate the output
-    print(DASHES)
-    # Print the table headers for the routing table output
-    print("| To Router  | Cost       | Via Router  |")
-    print(DASHES)
+    # Print the current router and iteration count
+    print("Current Router:", CurrRouter,
+          "| Current iteration:", iteration_count)
 
-    # Iterate through each element of the routing table
-    for key in RoutingTable:
-        # Extract the destination router ID from the element
-        to_router = key
-        # If the destination router is in the set of recently changed routers, prepend a "*" to the output
+    # Calculate the width of the table
+    spaced_line = max_key_length + max_val_length_1 + max_val_length_2 + 8
+
+    # Print the table border
+    print(f"+", "-"*(spaced_line), "+", sep="")
+
+    # Print the table headers
+    print(f"| {'Destination Router':<{max_key_length}} | {'Via Router':<{max_val_length_1}} | {'Distance':<{max_val_length_2}} |")
+    print(f"|{'-'*(max_key_length+2)}|{'-'*(max_val_length_1+2)}|{'-'*(max_val_length_2+2)}|")
+
+    # Print the rows of the table
+    for key, value in dictionary.items():
         if key in UpdateList:
-            to_router = "* " + to_router
-        # Otherwise, prepend a space to the output
-        else:
-            to_router = "  " + to_router
-        # Print the routing table entry, with proper spacing and alignment
-        print(f"| {to_router:<10} |"
-              + f" {RoutingTable[key][1] :<10} |"
-                + f" {(RoutingTable[key][0]):<11} |")
+            # If the key is in the update list, add an asterisk to the value in the first column
+            value = ("* " + value[0], value[1])
+        print(
+            f"| {key:<{max_key_length}} | {value[0]:<{max_val_length_1}} | {value[1]:<{max_val_length_2}} |")
 
-    # Print another line of dashes to separate the output
-    print(DASHES, end="\n\n")
+    # Print the table border
+    print(f"+", "-"*(spaced_line), "+", sep="")
+    print("\n")
+
     # Release the lock
     IOlock.release()
+
 
 
 def print_tuple_list_in_box(data_list, head1, head2):
@@ -78,9 +90,6 @@ def print_tuple_list_in_box(data_list, head1, head2):
 
     # Print the bottom of the box
     print("+", "-" * (total_width-2), "+", sep="")
-
-
-
 
 # Function to read the topology from a file
 def ReadTopology(graph):
